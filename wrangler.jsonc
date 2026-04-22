@@ -1,0 +1,25 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "open-assets-api",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-04-22",
+  "observability": {
+    "enabled": true
+  },
+  "vars": {
+    "CATALOG_BASE_URL": "https://raw.githubusercontent.com/openassetsarchive/open-assets/main",
+    "CATALOG_FETCH_TTL_SECONDS": "3600",
+    "QUERY_CACHE_TTL_SECONDS": "300",
+    "DEFAULT_SEARCH_LIMIT": "12",
+    "MAX_SEARCH_LIMIT": "50",
+    "MCP_SERVER_NAME": "open-assets",
+    "MCP_SERVER_VERSION": "0.1.0"
+  }
+  // To use R2 as the primary catalog origin, uncomment and set your bucket name:
+  // "r2_buckets": [
+  //   {
+  //     "binding": "CATALOG_BUCKET",
+  //     "bucket_name": "open-assets-catalog"
+  //   }
+  // ]
+}

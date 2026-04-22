@@ -1,0 +1,10 @@
+interface Env {
+  CATALOG_BASE_URL?: string
+  CATALOG_FETCH_TTL_SECONDS?: string
+  QUERY_CACHE_TTL_SECONDS?: string
+  DEFAULT_SEARCH_LIMIT?: string
+  MAX_SEARCH_LIMIT?: string
+  MCP_SERVER_NAME?: string
+  MCP_SERVER_VERSION?: string
+  CATALOG_BUCKET?: R2Bucket
+}

@@ -27,6 +27,9 @@ This server does **not** fetch `all-assets.json` on every request. It works from
 
 ## Endpoints
 
+- `GET /`
+- `GET /llms.txt`
+- `GET /openapi.json`
 - `GET /health`
 - `GET /api/catalog/manifest`
 - `GET /api/search/assets`
@@ -66,6 +69,22 @@ curl "http://127.0.0.1:8787/api/search/packs?tagsAll=stylized&query=pirate"
 curl "http://127.0.0.1:8787/api/assets/quaternius-pirate-kit-weapon-cutlass"
 curl "http://127.0.0.1:8787/api/packs/quaternius-pirate-kit?includeAssets=true&assetLimit=10"
 ```
+
+## Production URLs
+
+Use these public URLs:
+
+- Base URL: `https://api.openassetsarchive.com`
+- Human/agent quickstart: `https://api.openassetsarchive.com/llms.txt`
+- OpenAPI description: `https://api.openassetsarchive.com/openapi.json`
+- MCP endpoint: `https://api.openassetsarchive.com/mcp`
+
+If an external agent only knows the base URL, the intended discovery path is:
+
+1. `GET /`
+2. `GET /llms.txt`
+3. `GET /openapi.json`
+4. use REST or MCP from there
 
 ## Local development
 

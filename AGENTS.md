@@ -56,6 +56,9 @@ This repo owns:
 
 ## Current routes
 
+- `GET /`
+- `GET /llms.txt`
+- `GET /openapi.json`
 - `GET /health`
 - `GET /api/catalog/manifest`
 - `GET /api/search/assets`
@@ -73,3 +76,12 @@ This repo owns:
 - `get_pack`
 - `resolve_assets_for_intent`
 - `get_catalog_stats`
+
+## Production discovery
+
+The production service is intended to be self-describing from:
+- `https://api.openassetsarchive.com/`
+- `https://api.openassetsarchive.com/llms.txt`
+- `https://api.openassetsarchive.com/openapi.json`
+
+Future changes should preserve those paths as stable discovery surfaces for external agents.

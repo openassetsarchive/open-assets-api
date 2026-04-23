@@ -3,6 +3,7 @@ import { etag } from 'hono/etag'
 import { Hono } from 'hono'
 import { getManifest } from './catalog'
 import { getMaxSearchLimit, getQueryCacheTtlSeconds } from './config'
+import { buildLlmsTxt, buildOpenApiDocument, buildRootDocument } from './discovery'
 import { createMcpApp } from './mcp'
 import { getAsset, getPack, resolveAssetsForIntent, searchAssets, searchPacks } from './search'
 import { jsonResponse, parseLimit, splitCsvOrRepeated, textResponse, truthyParam } from './utils'
@@ -68,12 +69,25 @@ function createApiApp(env: Env) {
   app.use('*', etag())
 
   app.get('/', async (c) => {
+    const origin = new URL(c.req.url).origin
     const manifest = await getManifest(env)
     return jsonResponse({
-      service: 'open-assets-api',
-      status: 'ok',
-      mcpPath: '/mcp',
+      ...buildRootDocument(origin),
       counts: manifest.counts,
+    })
+  })
+
+  app.get('/llms.txt', async (c) => {
+    const origin = new URL(c.req.url).origin
+    return textResponse(buildLlmsTxt(origin), {
+      headers: makeCacheHeaders(getQueryCacheTtlSeconds(env)),
+    })
+  })
+
+  app.get('/openapi.json', async (c) => {
+    const origin = new URL(c.req.url).origin
+    return jsonResponse(buildOpenApiDocument(origin), {
+      headers: makeCacheHeaders(getQueryCacheTtlSeconds(env)),
     })
   })
 

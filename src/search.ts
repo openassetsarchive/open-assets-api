@@ -58,10 +58,15 @@ function subtractSet(source: Set<string>, blocked: Set<string>): Set<string> {
   return result
 }
 
-function scoreAsset(asset: AssetSummary, input: SearchAssetsInput, queryTokens: string[]): { score: number; reasons: string[] } {
+function scoreAsset(
+  asset: AssetSummary,
+  input: SearchAssetsInput,
+  queryTokens: string[],
+  packHaystack = '',
+): { score: number; reasons: string[] } {
   let score = 0
   const reasons: string[] = []
-  const haystack = `${asset.name} ${asset.description ?? ''} ${(asset.tags ?? []).join(' ')} ${(asset.aliases ?? []).join(' ')}`.toLowerCase()
+  const haystack = `${packHaystack} ${asset.packName} ${asset.name} ${asset.description ?? ''} ${(asset.tags ?? []).join(' ')} ${(asset.aliases ?? []).join(' ')}`.toLowerCase()
 
   for (const tag of input.tagsAll ?? []) {
     if (asset.tags.includes(tag)) {
@@ -166,7 +171,10 @@ export async function searchAssets(env: Env, input: SearchAssetsInput): Promise<
   const tagsAll = (input.tagsAll ?? []).map(normalizeToken)
   const tagsAny = (input.tagsAny ?? []).map(normalizeToken)
   const tagsNot = (input.tagsNot ?? []).map(normalizeToken)
+  const packIds = (input.packIds ?? []).map(normalizeToken)
   const limit = input.limit ?? 12
+  let locations: Awaited<ReturnType<typeof getAssetLocations>> | null = null
+  let packHaystacksById: Map<string, string> | null = null
 
   const requiredSets: Set<string>[] = []
 
@@ -178,12 +186,43 @@ export async function searchAssets(env: Env, input: SearchAssetsInput): Promise<
     requiredSets.push(new Set(row.assetIds))
   }
 
-  for (const token of queryTokens) {
-    const row = await getTokenIndex(env, token).catch(() => null)
-    if (!row) {
+  if (queryTokens.length > 0) {
+    const tokenSets: Set<string>[] = []
+
+    for (const token of queryTokens) {
+      const row = await getTokenIndex(env, token).catch(() => null)
+      if (row) {
+        tokenSets.push(new Set(row.assetIds))
+      }
+    }
+
+    const packs = await getPacks(env)
+    packHaystacksById = new Map<string, string>()
+    const matchingPackIds = new Set<string>()
+    for (const pack of packs) {
+      const haystack = `${pack.name} ${pack.description ?? ''} ${pack.tags.join(' ')}`.toLowerCase()
+      packHaystacksById.set(pack.id, haystack)
+      if (queryTokens.some((token) => haystack.includes(token))) {
+        matchingPackIds.add(pack.id)
+      }
+    }
+
+    if (matchingPackIds.size > 0) {
+      locations = locations ?? await getAssetLocations(env)
+      tokenSets.push(
+        new Set(
+          Object.entries(locations.assetsById)
+            .filter(([, location]) => matchingPackIds.has(location.packId))
+            .map(([assetId]) => assetId),
+        ),
+      )
+    }
+
+    const queryCandidateIds = unionSets(tokenSets)
+    if (queryCandidateIds.size === 0) {
       return []
     }
-    requiredSets.push(new Set(row.assetIds))
+    requiredSets.push(queryCandidateIds)
   }
 
   if (input.kind) {
@@ -202,6 +241,17 @@ export async function searchAssets(env: Env, input: SearchAssetsInput): Promise<
     requiredSets.push(new Set(row.assetIds))
   }
 
+  if (packIds.length > 0) {
+    locations = await getAssetLocations(env)
+    requiredSets.push(
+      new Set(
+        Object.entries(locations.assetsById)
+          .filter(([, location]) => packIds.includes(location.packId))
+          .map(([assetId]) => assetId),
+      ),
+    )
+  }
+
   let candidateIds = requiredSets.length > 0 ? intersectSets(requiredSets) : new Set<string>()
 
   if (tagsAny.length > 0) {
@@ -212,20 +262,11 @@ export async function searchAssets(env: Env, input: SearchAssetsInput): Promise<
       .map((row) => new Set(row!.assetIds))
 
     const optionalUnion = unionSets(optionalSets)
-    candidateIds = candidateIds.size > 0 ? intersectSets([candidateIds, optionalUnion]) : optionalUnion
-  }
-
-  if (candidateIds.size === 0 && input.packIds && input.packIds.length > 0) {
-    const locations = await getAssetLocations(env)
-    candidateIds = new Set(
-      Object.entries(locations.assetsById)
-        .filter(([, location]) => input.packIds!.includes(location.packId))
-        .map(([assetId]) => assetId),
-    )
+    candidateIds = requiredSets.length > 0 ? intersectSets([candidateIds, optionalUnion]) : optionalUnion
   }
 
   if (candidateIds.size === 0) {
-    if (requiredSets.length === 0 && tagsAny.length === 0 && (!input.packIds || input.packIds.length === 0)) {
+    if (requiredSets.length === 0 && tagsAny.length === 0) {
       throw new Error('At least one search constraint is required.')
     }
     return []
@@ -241,7 +282,7 @@ export async function searchAssets(env: Env, input: SearchAssetsInput): Promise<
     candidateIds = subtractSet(candidateIds, unionSets(blockedSets))
   }
 
-  const locations = await getAssetLocations(env)
+  locations = locations ?? await getAssetLocations(env)
   const packToAssetIds = new Map<string, string[]>()
 
   for (const assetId of candidateIds) {
@@ -254,8 +295,8 @@ export async function searchAssets(env: Env, input: SearchAssetsInput): Promise<
     packToAssetIds.set(location.packId, ids)
   }
 
-  const packIds = Array.from(packToAssetIds.keys()).sort(compareStrings)
-  const assetBundles = await Promise.all(packIds.map((packId) => getPackAssetSummaries(env, packId)))
+  const candidatePackIds = Array.from(packToAssetIds.keys()).sort(compareStrings)
+  const assetBundles = await Promise.all(candidatePackIds.map((packId) => getPackAssetSummaries(env, packId)))
 
   const summariesById = new Map<string, AssetSummary>()
   for (const bundle of assetBundles) {
@@ -270,10 +311,15 @@ export async function searchAssets(env: Env, input: SearchAssetsInput): Promise<
     if (!asset) {
       continue
     }
-    if (!assetMatchesPostFilters(asset, { ...input, tagsNot })) {
+    if (!assetMatchesPostFilters(asset, { ...input, tagsNot, packIds })) {
       continue
     }
-    const { score, reasons } = scoreAsset(asset, { ...input, tagsAll, tagsAny, tagsNot }, queryTokens)
+    const { score, reasons } = scoreAsset(
+      asset,
+      { ...input, tagsAll, tagsAny, tagsNot, packIds },
+      queryTokens,
+      packHaystacksById?.get(asset.packId),
+    )
     ranked.push({ asset, score, reasons })
   }
 
